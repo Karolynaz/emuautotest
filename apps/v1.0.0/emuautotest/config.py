@@ -4,7 +4,8 @@ from pathlib import Path
 # Base directories
 BASE_DIR = Path(__file__).resolve().parent.parent
 EMULATOR_DIR = BASE_DIR / "emulator" / "azahar-macos-arm64-2126.2"
-AZAHAR_BINARY = EMULATOR_DIR / "Azahar.app" / "Contents" / "MacOS" / "azahar"
+EMUAUTOTEST_APP = EMULATOR_DIR / "Emuautotest.app"
+AZAHAR_BINARY = (EMUAUTOTEST_APP / "Contents" / "MacOS" / "azahar") if EMUAUTOTEST_APP.exists() else (EMULATOR_DIR / "Azahar.app" / "Contents" / "MacOS" / "azahar")
 ROMS_DIR = BASE_DIR / "roms"
 DEFAULT_ROM = ROMS_DIR / "2048-3D.3dsx"
 

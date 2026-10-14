@@ -79,7 +79,10 @@ class InputManager:
             owner = w.get("kCGWindowOwnerName", "")
             name = w.get("kCGWindowName", "")
             pid = w.get("kCGWindowOwnerPID")
-            if process_name.lower() in owner.lower() or process_name.lower() in name.lower():
+            owner_lower = owner.lower()
+            name_lower = name.lower()
+            proc_lower = process_name.lower()
+            if proc_lower in owner_lower or proc_lower in name_lower or "emuautotest" in owner_lower or "emuautotest" in name_lower:
                 bounds = w.get("kCGWindowBounds", {})
                 if bounds.get("Width", 0) > 50 and bounds.get("Height", 0) > 50:
                     wb = WindowBounds(
