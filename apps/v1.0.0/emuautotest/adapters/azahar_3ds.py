@@ -113,18 +113,32 @@ class Azahar3DSAdapter(BaseEmulatorAdapter):
         return win is not None
 
     def stop(self) -> bool:
-        """Stop running emulator."""
+        """Stop running emulator gracefully without triggering crash dialogs."""
         if self.process and self.process.poll() is None:
-            self.process.terminate()
+            # 1. Graceful Cocoa termination (avoids macOS CrashReporter)
+            if NSRunningApplication:
+                try:
+                    app = NSRunningApplication.runningApplicationWithProcessIdentifier_(self.process.pid)
+                    if app:
+                        app.terminate()
+                except Exception:
+                    pass
+
             try:
-                self.process.wait(timeout=3.0)
+                self.process.wait(timeout=1.5)
             except subprocess.TimeoutExpired:
-                self.process.kill()
+                # 2. SIGTERM
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=1.5)
+                except subprocess.TimeoutExpired:
+                    # 3. Last resort: kill
+                    self.process.kill()
             self.process = None
 
-        # Fallback: kill any leftover azahar processes
+        # Clean any remaining processes gracefully
         try:
-            subprocess.run(["killall", "azahar"], capture_output=True)
+            subprocess.run(["pkill", "-TERM", "-f", "azahar"], capture_output=True)
         except Exception:
             pass
 

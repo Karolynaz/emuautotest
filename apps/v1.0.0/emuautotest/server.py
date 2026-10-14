@@ -215,7 +215,7 @@ def emulator_read_memory(hex_address: str, size: int = 16) -> str:
 )
 def emulator_list_roms() -> str:
     try:
-        if not ROMMS_DIR_EXISTS := ROMS_DIR.exists():
+        if not ROMS_DIR.exists():
             return "No roms directory found."
         rom_files = [f.name for f in ROMS_DIR.iterdir() if f.suffix.lower() in [".3ds", ".3dsx", ".cia", ".cxi"]]
         if not rom_files:
