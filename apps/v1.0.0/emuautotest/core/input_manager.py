@@ -47,11 +47,11 @@ KEYCODES = {
     "START": [36],    # Return
     "SELECT": [56],   # Shift
     "HOME": [11],     # 'B'
-    # Directions (both D-pad and Circle Pad for maximum compatibility)
-    "UP": [126, 33],      # Arrow Up & '['
-    "DOWN": [125, 39],    # Arrow Down & '''
-    "LEFT": [123, 41],    # Arrow Left & ';'
-    "RIGHT": [124, 42],   # Arrow Right & '\'
+    # D-pad bindings; Circle Pad uses arrow keys separately.
+    "UP": [33],      # Arrow Up & '['
+    "DOWN": [39],    # Arrow Down & '''
+    "LEFT": [41],    # Arrow Left & ';'
+    "RIGHT": [42],   # Arrow Right & '\'
 }
 
 # Mouse event types in CoreGraphics
@@ -71,9 +71,9 @@ class InputManager:
     def set_pid(self, pid: int) -> None:
         self.target_pid = pid
 
-    def find_emulator_window(self, process_name: str = "azahar") -> Optional[Tuple[int, WindowBounds]]:
+    def find_emulator_window(self, process_name: str = "azahar", on_screen_only: bool = False) -> Optional[Tuple[int, WindowBounds]]:
         """Find the emulator window ID and bounding box on macOS."""
-        options = Quartz.kCGWindowListOptionOnScreenOnly
+        options = Quartz.kCGWindowListOptionOnScreenOnly if on_screen_only else Quartz.kCGWindowListOptionAll
         window_list = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID)
         for w in window_list:
             owner = w.get("kCGWindowOwnerName", "")
@@ -81,7 +81,7 @@ class InputManager:
             pid = w.get("kCGWindowOwnerPID")
             if process_name.lower() in owner.lower() or process_name.lower() in name.lower():
                 bounds = w.get("kCGWindowBounds", {})
-                if bounds.get("Width", 0) > 100 and bounds.get("Height", 0) > 100:
+                if bounds.get("Width", 0) > 50 and bounds.get("Height", 0) > 50:
                     wb = WindowBounds(
                         x=float(bounds["X"]),
                         y=float(bounds["Y"]),
@@ -101,7 +101,8 @@ class InputManager:
             if ev:
                 if self.target_pid:
                     _app_services.CGEventPostToPid(self.target_pid, ev)
-                _app_services.CGEventPost(kCGHIDEventTap, ev)
+                else:
+                    _app_services.CGEventPost(kCGHIDEventTap, ev)
                 _app_services.CFRelease(ev)
 
         time.sleep(max(duration_ms, 20) / 1000.0)
@@ -112,7 +113,8 @@ class InputManager:
             if ev:
                 if self.target_pid:
                     _app_services.CGEventPostToPid(self.target_pid, ev)
-                _app_services.CGEventPost(kCGHIDEventTap, ev)
+                else:
+                    _app_services.CGEventPost(kCGHIDEventTap, ev)
                 _app_services.CFRelease(ev)
 
     def press_button(self, button_name: str, duration_ms: int = 100) -> bool:
@@ -162,8 +164,8 @@ class InputManager:
 
         # Bottom screen bounds inside window:
         bottom_screen_top = bounds.y + title_bar_height + half_height
-        bottom_screen_left = bounds.x
-        bottom_screen_width = bounds.width
+        bottom_screen_width = bounds.width * 0.8
+        bottom_screen_left = bounds.x + (bounds.width - bottom_screen_width) / 2
         bottom_screen_height = half_height
 
         # Calculate target screen coordinate
@@ -175,8 +177,6 @@ class InputManager:
         # Mouse Down
         down_ev = _app_services.CGEventCreateMouseEvent(None, kCGEventLeftMouseDown, pt, 0)
         if down_ev:
-            if self.target_pid:
-                _app_services.CGEventPostToPid(self.target_pid, down_ev)
             _app_services.CGEventPost(kCGHIDEventTap, down_ev)
             _app_services.CFRelease(down_ev)
 
@@ -185,8 +185,6 @@ class InputManager:
         # Mouse Up
         up_ev = _app_services.CGEventCreateMouseEvent(None, kCGEventLeftMouseUp, pt, 0)
         if up_ev:
-            if self.target_pid:
-                _app_services.CGEventPostToPid(self.target_pid, up_ev)
             _app_services.CGEventPost(kCGHIDEventTap, up_ev)
             _app_services.CFRelease(up_ev)
 

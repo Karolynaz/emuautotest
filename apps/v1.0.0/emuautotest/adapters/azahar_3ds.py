@@ -1,8 +1,14 @@
 import os
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    from AppKit import NSRunningApplication
+except ImportError:
+    NSRunningApplication = None
 
 from emuautotest.adapters.base import BaseEmulatorAdapter
 from emuautotest.config import (
@@ -59,6 +65,31 @@ class Azahar3DSAdapter(BaseEmulatorAdapter):
 
         if self.process.pid:
             self.input_mgr.set_pid(self.process.pid)
+
+            def _minimize_to_dock(pid: int):
+                for _ in range(15):
+                    time.sleep(0.15)
+                    if NSRunningApplication:
+                        try:
+                            app = NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
+                            if app:
+                                app.hide()
+                        except Exception:
+                            pass
+                    try:
+                        subprocess.run(
+                            [
+                                "osascript",
+                                "-e",
+                                f'tell application "System Events" to set miniaturized of (every window of (every process whose unix id is {pid})) to true',
+                            ],
+                            capture_output=True,
+                            timeout=1.0,
+                        )
+                    except Exception:
+                        pass
+
+            threading.Thread(target=_minimize_to_dock, args=(self.process.pid,), daemon=True).start()
 
         # Wait for RPC server or window to be active
         ready = False
