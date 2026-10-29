@@ -223,3 +223,145 @@ def emulator_list_roms() -> str:
         return "Available ROMs:\n" + "\n".join(f"- {name} ({ROMS_DIR / name})" for name in rom_files)
     except Exception as e:
         return f"❌ Error listing ROMs: {str(e)}"
+
+
+@server.tool(
+    name="emulator_record_start",
+    description=(
+        "Start recording gameplay video in the background. "
+        "target: 'both' (dual-screen 400x480), 'top' (gameplay screen 400x240), or 'bottom' (touch screen 320x240). "
+        "format: 'mp4' (H.264 standard video) or 'gif' (high quality animated GIF). "
+        "fps: framerate (e.g. 15, 30, 60). "
+        "scale: integer pixel scaling (1 for native, 2 for 2x crisp upscale). "
+        "duration_seconds: optional auto-stop duration in seconds (0 for continuous background recording until stopped). "
+        "output_path: optional custom file path. If omitted, saves to recordings/ directory."
+    ),
+)
+def emulator_record_start(
+    target: str = "both",
+    fps: int = 30,
+    format: str = "mp4",
+    scale: int = 1,
+    duration_seconds: float = 0.0,
+    output_path: str = "",
+) -> str:
+    try:
+        max_dur = duration_seconds if duration_seconds > 0 else None
+        out = output_path.strip() if output_path.strip() else None
+        res = adapter.start_recording(
+            target=target,
+            fps=fps,
+            format=format,
+            scale=scale,
+            output_path=out,
+            max_duration=max_dur,
+        )
+        return (
+            f"🎬 Video recording started in background!\n"
+            f"File: {res['file_name']}\n"
+            f"Full Path: {res['file_path']}\n"
+            f"Target: {res['target']} | Format: {res['format'].upper()} | FPS: {res['fps']} | Scale: {res['scale']}x\n"
+            f"Auto-stop: {f'{duration_seconds}s' if max_dur else 'Continuous (call emulator_record_stop to finish)'}"
+        )
+    except Exception as e:
+        return f"❌ Failed to start recording: {str(e)}"
+
+
+@server.tool(
+    name="emulator_record_stop",
+    description="Stop the active video recording session and finalize the MP4/GIF file.",
+)
+def emulator_record_stop() -> str:
+    try:
+        res = adapter.stop_recording()
+        return (
+            f"✅ Video recording finalized successfully!\n"
+            f"File: {res['file_name']}\n"
+            f"Path: {res['file_path']}\n"
+            f"Duration: {res['duration_seconds']}s\n"
+            f"Frames: {res['frame_count']} ({res['fps']} FPS)\n"
+            f"Size: {res['file_size_human']} ({res['file_size_bytes']} bytes)\n"
+            f"Format: {res['format'].upper()}"
+        )
+    except Exception as e:
+        return f"❌ Failed to stop recording: {str(e)}"
+
+
+@server.tool(
+    name="emulator_record_status",
+    description="Get current status of active gameplay video recording.",
+)
+def emulator_record_status() -> str:
+    try:
+        st = adapter.get_recording_status()
+        if not st.get("is_recording"):
+            return "⏹️ No video recording currently active."
+        return (
+            f"🔴 Video Recording In Progress:\n"
+            f"File: {st['file_name']}\n"
+            f"Path: {st['file_path']}\n"
+            f"Elapsed: {st['elapsed_seconds']}s\n"
+            f"Frames Captured: {st['frame_count']}\n"
+            f"Target: {st['target']} | Format: {st['format']} | FPS: {st['fps']} | Scale: {st['scale']}x"
+        )
+    except Exception as e:
+        return f"❌ Failed to get recording status: {str(e)}"
+
+
+@server.tool(
+    name="emulator_record_clip",
+    description=(
+        "Synchronously record a gameplay clip of specified duration (e.g. 5 seconds) and export it. "
+        "Blocks until recording finishes and returns file details."
+    ),
+)
+def emulator_record_clip(
+    duration_seconds: float = 5.0,
+    target: str = "both",
+    fps: int = 30,
+    format: str = "mp4",
+    scale: int = 1,
+    output_path: str = "",
+) -> str:
+    try:
+        out = output_path.strip() if output_path.strip() else None
+        res = adapter.record_clip(
+            duration_seconds=duration_seconds,
+            target=target,
+            fps=fps,
+            format=format,
+            scale=scale,
+            output_path=out,
+        )
+        return (
+            f"🎥 Gameplay clip recorded and exported!\n"
+            f"File: {res['file_name']}\n"
+            f"Path: {res['file_path']}\n"
+            f"Duration: {res['duration_seconds']}s\n"
+            f"Frames: {res['frame_count']} ({res['fps']} FPS)\n"
+            f"Size: {res['file_size_human']}\n"
+            f"Format: {res['format'].upper()}"
+        )
+    except Exception as e:
+        return f"❌ Failed to record clip: {str(e)}"
+
+
+@server.tool(
+    name="emulator_list_recordings",
+    description="List all recorded gameplay video and GIF files saved in the recordings folder.",
+)
+def emulator_list_recordings() -> str:
+    try:
+        recs = adapter.list_recordings()
+        if not recs:
+            return "No recordings found in recordings/ directory."
+        lines = [f"📁 Recorded Gameplay Files ({len(recs)} total):"]
+        for r in recs:
+            lines.append(
+                f"- {r['file_name']} [{r['format'].upper()}, {r['size_human']}, modified: {r['modified_at']}]\n"
+                f"  Path: {r['file_path']}"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        return f"❌ Failed to list recordings: {str(e)}"
+

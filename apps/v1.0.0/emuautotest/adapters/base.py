@@ -56,3 +56,45 @@ class BaseEmulatorAdapter(ABC):
     def write_memory(self, address: int, data: bytes) -> bool:
         """Write to emulator RAM."""
         pass
+
+    @abstractmethod
+    def start_recording(
+        self,
+        target: str = "both",
+        fps: int = 30,
+        format: str = "mp4",
+        scale: int = 1,
+        output_path: Optional[str] = None,
+        max_duration: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Start gameplay video recording."""
+        pass
+
+    @abstractmethod
+    def stop_recording(self) -> Dict[str, Any]:
+        """Stop gameplay video recording and save file."""
+        pass
+
+    @abstractmethod
+    def get_recording_status(self) -> Dict[str, Any]:
+        """Get status of active video recording."""
+        pass
+
+    @abstractmethod
+    def record_clip(
+        self,
+        duration_seconds: float = 5.0,
+        target: str = "both",
+        fps: int = 30,
+        format: str = "mp4",
+        scale: int = 1,
+        output_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Record a fixed duration clip."""
+        pass
+
+    @abstractmethod
+    def list_recordings(self) -> List[Dict[str, Any]]:
+        """List all saved recordings."""
+        pass
+

@@ -20,6 +20,7 @@ from emuautotest.config import (
 from emuautotest.core.input_manager import InputManager
 from emuautotest.core.screen_manager import ScreenManager
 from emuautotest.core.types import EmulatorStatus
+from emuautotest.core.video_recorder import VideoRecorder
 from emuautotest.rpc.azahar_rpc import AzaharRPCClient
 
 
@@ -32,6 +33,7 @@ class Azahar3DSAdapter(BaseEmulatorAdapter):
         self.process: Optional[subprocess.Popen] = None
         self.rpc = AzaharRPCClient(address=AZAHAR_RPC_HOST, port=AZAHAR_RPC_PORT, timeout=2.0)
         self.input_mgr = InputManager()
+        self.recorder = VideoRecorder(frame_provider=self._get_raw_frame)
 
     def launch(self, rom_path: Optional[str] = None) -> bool:
         """Launch Azahar emulator with specified ROM."""
@@ -114,6 +116,13 @@ class Azahar3DSAdapter(BaseEmulatorAdapter):
 
     def stop(self) -> bool:
         """Stop running emulator gracefully without triggering crash dialogs."""
+        # 0. Cleanly stop active video recording first
+        if hasattr(self, "recorder") and self.recorder.is_recording():
+            try:
+                self.recorder.stop()
+            except Exception:
+                pass
+
         if self.process and self.process.poll() is None:
             # 1. Graceful Cocoa termination (avoids macOS CrashReporter)
             if NSRunningApplication:
@@ -241,6 +250,27 @@ class Azahar3DSAdapter(BaseEmulatorAdapter):
                     target = act.get("screen", "both")
                     _, b64, w, h = self.take_screenshot(target=target)
                     item_res["screenshot"] = {"width": w, "height": h, "base64": b64}
+                elif act_type == "record_start":
+                    rec_target = act.get("target", "both")
+                    rec_fps = int(act.get("fps", 30))
+                    rec_fmt = act.get("format", "mp4")
+                    rec_scale = int(act.get("scale", 1))
+                    rec_out = act.get("output_path", None)
+                    rec_res = self.start_recording(
+                        target=rec_target, fps=rec_fps, format=rec_fmt, scale=rec_scale, output_path=rec_out
+                    )
+                    item_res["recording"] = rec_res
+                elif act_type == "record_stop":
+                    item_res["recording"] = self.stop_recording()
+                elif act_type == "record_clip":
+                    dur_sec = float(act.get("duration_seconds", 3.0))
+                    rec_target = act.get("target", "both")
+                    rec_fps = int(act.get("fps", 30))
+                    rec_fmt = act.get("format", "mp4")
+                    rec_scale = int(act.get("scale", 1))
+                    item_res["recording"] = self.record_clip(
+                        duration_seconds=dur_sec, target=rec_target, fps=rec_fps, format=rec_fmt, scale=rec_scale
+                    )
                 else:
                     item_res["status"] = f"ignored unknown action: {act_type}"
             except Exception as e:
@@ -248,6 +278,67 @@ class Azahar3DSAdapter(BaseEmulatorAdapter):
 
             results.append(item_res)
         return results
+
+    def _get_raw_frame(self) -> bytes:
+        """Fetch raw PNG frame directly from emulator RPC or OS window capture."""
+        try:
+            return self.rpc.screenshot_png()
+        except Exception:
+            win = self.input_mgr.find_emulator_window()
+            if win:
+                win_bytes = ScreenManager.capture_window_screencapture(win[0])
+                if win_bytes:
+                    return win_bytes
+            raise RuntimeError("Failed to capture frame from RPC or OS window")
+
+    def start_recording(
+        self,
+        target: str = "both",
+        fps: int = 30,
+        format: str = "mp4",
+        scale: int = 1,
+        output_path: Optional[str] = None,
+        max_duration: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        if not self.is_running():
+            raise RuntimeError("Emulator is not running")
+        return self.recorder.start(
+            target=target,
+            fps=fps,
+            format=format,
+            scale=scale,
+            output_path=output_path,
+            max_duration=max_duration,
+        )
+
+    def stop_recording(self) -> Dict[str, Any]:
+        return self.recorder.stop()
+
+    def get_recording_status(self) -> Dict[str, Any]:
+        return self.recorder.get_status()
+
+    def record_clip(
+        self,
+        duration_seconds: float = 5.0,
+        target: str = "both",
+        fps: int = 30,
+        format: str = "mp4",
+        scale: int = 1,
+        output_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if not self.is_running():
+            raise RuntimeError("Emulator is not running")
+        return self.recorder.record_clip(
+            duration_seconds=duration_seconds,
+            target=target,
+            fps=fps,
+            format=format,
+            scale=scale,
+            output_path=output_path,
+        )
+
+    def list_recordings(self) -> List[Dict[str, Any]]:
+        return VideoRecorder.list_saved_recordings()
 
     def read_memory(self, address: int, size: int) -> Optional[bytes]:
         return self.rpc.read_memory(address, size)

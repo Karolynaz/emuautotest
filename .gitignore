@@ -6,3 +6,9 @@ env/
 *.log
 .DS_Store
 apps/**/.venv/
+apps/**/recordings/*.mp4
+apps/**/recordings/*.gif
+apps/**/recordings/*.mov
+apps/**/recordings/*.mkv
+apps/**/recordings/*.webm
+

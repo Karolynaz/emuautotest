@@ -76,6 +76,31 @@ def run_tests():
     for r in macro_results:
         print(f"     Step {r['step']}: {r['action']} -> {r['status']}")
 
+    print("\n[6b] Testing background MP4 video recording...")
+    rec_start = adapter.start_recording(target="both", fps=30, format="mp4", scale=1)
+    print(f"  -> Started recording: {rec_start['file_name']}")
+    time.sleep(0.5)
+    rec_status = adapter.get_recording_status()
+    print(f"  -> Recording status: active={rec_status['is_recording']}, elapsed={rec_status.get('elapsed_seconds')}s, frames={rec_status.get('frame_count')}")
+    # Perform some inputs while recording
+    adapter.press_button("DOWN", duration_ms=100)
+    time.sleep(0.5)
+    rec_res = adapter.stop_recording()
+    print(f"  -> Finalized MP4: {rec_res['file_name']} (duration: {rec_res['duration_seconds']}s, frames: {rec_res['frame_count']}, size: {rec_res['file_size_human']})")
+    assert Path(rec_res["file_path"]).exists() and rec_res["file_size_bytes"] > 0, "MP4 video recording file missing or empty"
+
+    print("\n[6c] Testing synchronous GIF clip recording...")
+    clip_res = adapter.record_clip(duration_seconds=1.5, target="top", fps=15, format="gif", scale=1)
+    print(f"  -> Recorded GIF clip: {clip_res['file_name']} (duration: {clip_res['duration_seconds']}s, size: {clip_res['file_size_human']})")
+    assert Path(clip_res["file_path"]).exists() and clip_res["file_size_bytes"] > 0, "GIF clip recording file missing or empty"
+
+    print("\n[6d] Listing saved recordings...")
+    saved_list = adapter.list_recordings()
+    print(f"  -> Found {len(saved_list)} saved recordings in directory:")
+    for s in saved_list[:3]:
+        print(f"     * {s['file_name']} ({s['size_human']}, format: {s['format']})")
+    assert len(saved_list) >= 2, "Expected at least 2 recordings in list"
+
     print("\n[7/7] Stopping emulator...")
     adapter.stop()
     assert not adapter.is_running(), "Emulator failed to stop"
