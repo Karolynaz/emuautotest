@@ -1,0 +1,1 @@
+Emuautotest.app

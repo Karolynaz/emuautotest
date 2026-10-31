@@ -5,13 +5,20 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 EMULATOR_DIR = BASE_DIR / "emulator" / "azahar-macos-arm64-2126.2"
 EMUAUTOTEST_APP = EMULATOR_DIR / "Emuautotest.app"
-AZAHAR_BINARY = (EMUAUTOTEST_APP / "Contents" / "MacOS" / "azahar") if EMUAUTOTEST_APP.exists() else (EMULATOR_DIR / "Azahar.app" / "Contents" / "MacOS" / "azahar")
+AZAHAR_BINARY = (
+    (EMUAUTOTEST_APP / "Contents" / "MacOS" / "azahar")
+    if EMUAUTOTEST_APP.exists()
+    else (EMULATOR_DIR / "Azahar.app" / "Contents" / "MacOS" / "azahar")
+)
 ROMS_DIR = BASE_DIR / "roms"
 RECORDINGS_DIR = BASE_DIR / "recordings"
 DEFAULT_ROM = ROMS_DIR / "2048-3D.3dsx"
+RECENT_GAMES_DIR = Path.home() / "Library" / "Application Support" / "Azahar" / "recent_games"
+AZAHAR_CONFIG_PATH = Path.home() / "Library" / "Application Support" / "Azahar" / "config" / "qt-config.ini"
 
-# Ensure recordings directory exists
+# Ensure directories exist
 RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+RECENT_GAMES_DIR.mkdir(parents=True, exist_ok=True)
 
 # Azahar RPC Configuration
 AZAHAR_RPC_HOST = "127.0.0.1"

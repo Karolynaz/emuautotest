@@ -18,6 +18,7 @@ from emuautotest.config import (
     DEFAULT_ROM,
 )
 from emuautotest.core.input_manager import InputManager
+from emuautotest.core.recent_games_manager import RecentGamesManager
 from emuautotest.core.screen_manager import ScreenManager
 from emuautotest.core.types import EmulatorStatus
 from emuautotest.core.video_recorder import VideoRecorder
@@ -25,7 +26,10 @@ from emuautotest.rpc.azahar_rpc import AzaharRPCClient
 
 
 class Azahar3DSAdapter(BaseEmulatorAdapter):
-    """Nintendo 3DS adapter using Azahar emulator with RPC and macOS input automation."""
+    """Nintendo 3DS adapter using Azahar / Emuautotest emulator with RPC,
+
+    gamepad macro automation, video recording, and recent games auto-population.
+    """
 
     def __init__(self, binary_path: Optional[Path] = None):
         self.binary_path = binary_path or AZAHAR_BINARY
@@ -34,9 +38,18 @@ class Azahar3DSAdapter(BaseEmulatorAdapter):
         self.rpc = AzaharRPCClient(address=AZAHAR_RPC_HOST, port=AZAHAR_RPC_PORT, timeout=2.0)
         self.input_mgr = InputManager()
         self.recorder = VideoRecorder(frame_provider=self._get_raw_frame)
+        self.recent_mgr = RecentGamesManager()
+
+    def sync_recent_games(self, active_rom: Optional[Path] = None) -> List[str]:
+        """Synchronize the 5 most recent games into the initial emulator game list window."""
+        top_roms = self.recent_mgr.sync(active_rom=active_rom)
+        return [str(p) for p in top_roms]
 
     def launch(self, rom_path: Optional[str] = None) -> bool:
-        """Launch Azahar emulator with specified ROM."""
+        """Launch Azahar emulator with specified ROM or in main menu mode.
+
+        Auto-populates the last 5 launched games in the startup window.
+        """
         self.stop()
         try:
             subprocess.run(["pkill", "-9", "-f", "azahar"], capture_output=True)
@@ -44,20 +57,28 @@ class Azahar3DSAdapter(BaseEmulatorAdapter):
         except Exception:
             pass
 
-        if rom_path:
+        target_rom: Optional[Path] = None
+        if rom_path is not None and rom_path.strip() != "" and rom_path.strip().lower() != "menu":
             target_rom = Path(rom_path).resolve()
-        else:
-            target_rom = DEFAULT_ROM.resolve()
-
-        if not target_rom.exists():
-            raise FileNotFoundError(f"ROM file not found: {target_rom}")
+            if not target_rom.exists():
+                raise FileNotFoundError(f"ROM file not found: {target_rom}")
+        elif rom_path is None:
+            # Default to bundled ROM if available
+            if DEFAULT_ROM.exists():
+                target_rom = DEFAULT_ROM.resolve()
 
         if not self.binary_path.exists():
             raise FileNotFoundError(f"Azahar binary not found: {self.binary_path}")
 
+        # Sync top 5 recent games into Azahar startup game list
+        self.recent_mgr.sync(active_rom=target_rom)
+
         self.current_rom = target_rom
 
-        cmd = [str(self.binary_path), str(target_rom)]
+        cmd = [str(self.binary_path)]
+        if target_rom:
+            cmd.append(str(target_rom))
+
         self.process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
@@ -68,9 +89,36 @@ class Azahar3DSAdapter(BaseEmulatorAdapter):
         if self.process.pid:
             self.input_mgr.set_pid(self.process.pid)
 
-            def _minimize_to_dock(pid: int):
+            def _background_window_handler(pid: int):
+                # Ensure window remains in background/dock and auto-dismiss any rogue dialogs
                 for _ in range(15):
-                    time.sleep(0.15)
+                    time.sleep(0.2)
+                    # 1. Auto-dismiss any rogue alert dialog
+                    try:
+                        dismiss_script = f"""
+                        tell application "System Events"
+                            set procList to (every process whose unix id is {pid})
+                            if (count of procList) > 0 then
+                                set theProc to item 1 of procList
+                                repeat with w in (every window of theProc)
+                                    try
+                                        if subrole of w is "AXDialog" or name of w contains "Warning" or name of w contains "Įspėjimas" then
+                                            click (first button of w whose name is "OK" or name is "Gerai")
+                                        end if
+                                    end try
+                                end repeat
+                            end if
+                        end tell
+                        """
+                        subprocess.run(
+                            ["osascript", "-e", dismiss_script],
+                            capture_output=True,
+                            timeout=0.8,
+                        )
+                    except Exception:
+                        pass
+
+                    # 2. Minimize to dock
                     if NSRunningApplication:
                         try:
                             app = NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
@@ -86,12 +134,12 @@ class Azahar3DSAdapter(BaseEmulatorAdapter):
                                 f'tell application "System Events" to set miniaturized of (every window of (every process whose unix id is {pid})) to true',
                             ],
                             capture_output=True,
-                            timeout=1.0,
+                            timeout=0.8,
                         )
                     except Exception:
                         pass
 
-            threading.Thread(target=_minimize_to_dock, args=(self.process.pid,), daemon=True).start()
+            threading.Thread(target=_background_window_handler, args=(self.process.pid,), daemon=True).start()
 
         # Wait for RPC server or window to be active
         ready = False
@@ -148,6 +196,13 @@ class Azahar3DSAdapter(BaseEmulatorAdapter):
         # Clean any remaining processes gracefully
         try:
             subprocess.run(["pkill", "-TERM", "-f", "azahar"], capture_output=True)
+        except Exception:
+            pass
+
+        # Update recent games list after stopping
+        try:
+            if self.current_rom:
+                self.recent_mgr.sync(active_rom=self.current_rom)
         except Exception:
             pass
 

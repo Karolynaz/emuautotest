@@ -10,21 +10,25 @@ from emuautotest.config import ROMS_DIR
 
 server = MCPServer(
     name="Emuautotest",
-    version="1.0.0",
+    version="1.1.0",
     instructions=(
         "Emuautotest Nintendo 3DS Emulator Testbed for AI agents.\n"
-        "Allows testing games, navigating menus, inspecting performance and RAM, "
-        "and sending controller/touch inputs."
+        "Allows automated testing, menu navigation, video recording (MP4/GIF), "
+        "RAM inspection, gamepad macros, and automatic startup game list population."
     ),
 )
 
-# Active adapter (default to Nintendo 3DS via Azahar)
+# Active adapter (default to Nintendo 3DS via Azahar / Emuautotest)
 adapter = Azahar3DSAdapter()
 
 
 @server.tool(
     name="emulator_start",
-    description="Start the Nintendo 3DS emulator with a given ROM. If rom_path is omitted, loads default 2048-3D homebrew.",
+    description=(
+        "Start the Nintendo 3DS emulator with a given ROM or open the main menu with recent games. "
+        "If rom_path is omitted, loads default ROM. The initial window automatically displays "
+        "the 5 most recently played games."
+    ),
 )
 def emulator_start(rom_path: str = "") -> str:
     try:
@@ -34,7 +38,7 @@ def emulator_start(rom_path: str = "") -> str:
             return (
                 f"✅ Emulator started successfully!\n"
                 f"PID: {status.pid}\n"
-                f"ROM: {status.rom_path}\n"
+                f"ROM: {status.rom_path or 'Main Menu / Recent Games'}\n"
                 f"RPC Connected: {status.rpc_connected}\n"
                 f"FPS: {status.game_fps}"
             )
@@ -46,7 +50,7 @@ def emulator_start(rom_path: str = "") -> str:
 
 @server.tool(
     name="emulator_stop",
-    description="Stop the running emulator process.",
+    description="Stop the running emulator process gracefully.",
 )
 def emulator_stop() -> str:
     try:
@@ -226,6 +230,25 @@ def emulator_list_roms() -> str:
 
 
 @server.tool(
+    name="emulator_sync_recent_games",
+    description=(
+        "Synchronize the 5 most recently launched games so they appear immediately in the emulator startup window list, "
+        "eliminating the need to click 'Failai > Neseniai įkrauti failai'. Optional active_rom parameter."
+    ),
+)
+def emulator_sync_recent_games(active_rom: str = "") -> str:
+    try:
+        target = Path(active_rom).resolve() if active_rom.strip() else None
+        top_roms = adapter.sync_recent_games(active_rom=target)
+        lines = [f"✅ Successfully synchronized {len(top_roms)} recent games to startup window:"]
+        for idx, r in enumerate(top_roms, 1):
+            lines.append(f"{idx}. {Path(r).name} ({r})")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"❌ Failed to sync recent games: {str(e)}"
+
+
+@server.tool(
     name="emulator_record_start",
     description=(
         "Start recording gameplay video in the background. "
@@ -364,4 +387,3 @@ def emulator_list_recordings() -> str:
         return "\n".join(lines)
     except Exception as e:
         return f"❌ Failed to list recordings: {str(e)}"
-
